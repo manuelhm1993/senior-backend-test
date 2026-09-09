@@ -30,6 +30,7 @@ services:
 
   client_web:
     image: mh_php:8.3-dev
+    user: "1000:1000"
     command: php artisan serve --host=0.0.0.0 --port=8081
     ports:
       - "8081:8081"
@@ -40,10 +41,11 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-
+  
   client_worker:
     image: mh_php:8.3-dev
-    command: php artisan queue:work rabbitmq --sleep=3 --tries=3
+    user: "1000:1000"
+    command: php artisan queue:work rabbitmq --queue=client_queue --sleep=3 --tries=3
     volumes:
       - ./client-app:/var/www/html
     depends_on:
@@ -54,6 +56,7 @@ services:
 
   server_web:
     image: mh_php:8.3-dev
+    user: "1000:1000"
     command: php artisan serve --host=0.0.0.0 --port=8082
     ports:
       - "8082:8082"
@@ -67,6 +70,7 @@ services:
 
   server_worker:
     image: mh_php:8.3-dev
+    user: "1000:1000"
     command: php artisan queue:work rabbitmq --sleep=3 --tries=3
     volumes:
       - ./server-app:/var/www/html
