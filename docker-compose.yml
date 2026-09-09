@@ -41,11 +41,11 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-
+  
   client_worker:
     image: mh_php:8.3-dev
     user: "1000:1000"
-    command: php artisan queue:work rabbitmq --sleep=3 --tries=3
+    command: php artisan queue:work rabbitmq --queue=client_queue --sleep=3 --tries=3
     volumes:
       - ./client-app:/var/www/html
     depends_on:
