@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'pairing_secret_hash',
     'status',
     'contract_version',
+    'owner_name',
+    'owner_email',
 ])]
 class Installation extends Model
 {
