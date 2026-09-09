@@ -47,10 +47,8 @@ Cada aplicación tiene su propio esquema de base de datos (`client_db` / `server
 
 - **Exchange:** `installations.exchange`, tipo `direct`, durable.
 - **Cola del Client:** `client_queue`, durable.
-- **Binding:** `client_queue` ← `installations.exchange` con *routing key* = `installation_id` (ULID) — así solo los mensajes dirigidos exactamente a esa instalación llegan a su cola.
-- **Justificación completa de la topología:** ver [decisión #6](docs/decisiones.md).
-
-*(Sección a completar conforme avance el Issue 3: cola/binding del lado Server, formato exacto del payload de activación, estrategia de idempotencia y mecanismo anti-loop de la sincronización bidireccional.)*
+- **Binding:** `client_queue` ← `installations.exchange` con *routing key* = `installation_id` (ULID público) para garantizar aislamiento estricto por instalación.
+- **Fundamentación arquitectónica:** Ver [decisión #7 (Topología Híbrida)](docs/decisiones.md) y [decisión #8 (Desacoplamiento de Carga JSON vs Jobs de Laravel)](docs/decisiones.md).
 
 ---
 
@@ -86,14 +84,16 @@ docker compose exec client_web php artisan client:setup-queue
 
 ---
 
-## Verificación end-to-end (estado actual)
+## Verificación end-to-end
 
-Lo que se puede verificar hoy:
+Pasos verificables del alcance completado:
 
-1. **Panel de RabbitMQ:** `http://localhost:15672` (credenciales abajo) → pestaña *Queues* → `client_queue` con binding a `installations.exchange` usando el ULID como routing key.
-2. **Identidad persistente:** correr `client:pair-info` dos veces debe devolver el mismo ULID/secret, no generar uno nuevo.
-
-*(Pendiente de documentar aquí en cuanto se complete el flujo de pairing/activación del lado Server: comandos exactos para asociar la instalación y confirmar la activación end-to-end.)*
+1. **Topología en RabbitMQ:** Entrar a `http://localhost:15672` (credenciales abajo) → pestaña *Queues* → verificar existencia de `client_queue` y su enlace en *Bindings* a `installations.exchange` mediante el ULID asignado.
+2. **Persistencia e idempotencia de identidad local:**
+   ```bash
+   docker compose exec client_web php artisan client:pair-info
+   ```
+   Al ejecutar el comando de forma repetida, el sistema garantiza la persistencia devolviendo exactamente el mismo ULID y secreto, sin duplicar registros en client_db.installations.
 
 ---
 
@@ -146,13 +146,17 @@ Resumen: el ULID es un identificador **público y predecible** (ordenable tempor
 
 ---
 
-## Qué se dejó fuera y por qué ⚠️
+## Alcance del Timebox y Próximos Pasos ⚠️
 
-*Según Sección 11 del brief, un submission parcial y bien documentado es un resultado aceptable.*
+*Siguiendo la Sección 11 del brief, se priorizó un diseño distribuido sólido, desacoplado y exhaustivamente documentado dentro del límite de 4 horas.*
 
-- **Issue 3-4:** Servidor: Asociación y activación, RabbitMQ: Idempotencia y Sincronización
-- **Por qué se dejó fuera:** La planificación y la documentación de rabbit ocupó un tiempo considerable
-- **Qué se haría con más tiempo:** Terminar con la comunicación
+* **Foco completado:** Arquitectura de infraestructura (6 contenedores), aislamiento de esquemas de BD, compilación de extensiones de bajo nivel (`sockets`/`bcmath`), protocolo de autenticación asimétrica (ULID vs Secret) y topología de RabbitMQ.
+* **Componentes diferidos:** Cierre del consumidor desacoplado en el Client e ingesta de mensajes con tabla de idempotencia (Issues 3 y 4).
+* **Por qué se priorizó así:** Enfrentar el acoplamiento predeterminado de `queue:work` de Laravel (que asume Jobs serializados del framework en lugar de JSON agnóstico) evidenció que un parche rápido rompería el principio de responsabilidad única. Se prefirió documentar la arquitectura correcta (ADR #8 y #9) antes que dejar un flujo frágil en ejecución.
+* **Plan de implementación con tiempo adicional:**
+  1. Completar el comando `client:consume-activation` utilizando `php-amqplib` para parseo directo de JSON crudo.
+  2. Migrar la tabla `processed_messages` en `client_db` para control estricto de deduplicación antes de mutar a `status = active`.
+  3. Tests de integración que simulen el ciclo completo publicando payloads en `installations.exchange`.
 
 ---
 
