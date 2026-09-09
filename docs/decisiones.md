@@ -39,3 +39,26 @@
 * **Justificación:**
   * **El ULID no es un secreto:** Los ULID son ordenables en el tiempo; su componente temporal inicial es predecible y analizable, lo que permitiría a un atacante inferir identidades de otras instalaciones. Se utiliza exclusivamente como identificador público y clave de enrutamiento (*routing key*).
   * **Autenticación en el emparejamiento:** El `pairing_secret` actúa como prueba de posesión (*proof of possession*). Solo quien tiene acceso a la consola/interfaz local del Cliente conoce el secreto, evitando que un actor malicioso asocie una instalación ajena con solo adivinar su ULID.
+
+---
+
+### 6. Topología RabbitMQ: Exchange Direct + Cola Fija + Binding Dinámico por ULID
+* **Decisión:** Usar un único `Exchange` de tipo `direct` (`installations.exchange`), con una cola de nombre **fijo** (`client_queue`) cuyo *binding* al exchange usa el `installation_id` (ULID) como *routing key*.
+* **Justificación:**
+  * **Terminología AMQP correcta:** un *channel* es la conexión lógica multiplexada sobre el socket TCP — no debe confundirse con *queue* (buzón de mensajes) ni con *routing key* (criterio de enrutamiento). El aislamiento por instalación se logra mediante el *binding*, no mediante el nombre de la cola.
+  * **Por qué cola fija y no `client_queue_{ULID}`:** el alcance de este ejercicio contempla un solo Client corriendo en el entorno de demo (ver Sección 11 del brief, "Support for more than one Client instance" es una Optional Extension). Con un solo consumidor, el aislamiento real —que sí es requisito obligatorio— lo garantiza el *binding* con la *routing key* exacta del ULID, no el nombre físico de la cola. El diseño escala sin reescritura: para múltiples clientes bastaría con parametrizar el nombre de la cola por instalación.
+  * **Exchange `direct` vs `fanout`/`topic`:** se descartó `fanout` porque transmitiría a todos los consumidores sin distinción (viola el requisito "y solo a ese Client"). Se descartó `topic` por ser innecesariamente flexible para un enrutamiento de clave exacta 1 a 1.
+  * **Declaración explícita y separada (`client:setup-queue`):** la topología (exchange/cola/binding) se declara en un comando independiente del de identidad (`client:pair-info`), ejecutado una sola vez tras generar el ULID. Esto evita acoplar la generación de identidad con efectos secundarios de infraestructura de mensajería, y hace explícito el orden de dependencia: sin ULID no hay binding posible.
+  * **Durabilidad:** tanto el exchange como la cola se declaran `durable: true` para sobrevivir a un reinicio del broker sin perder la topología — relevante porque en este entorno de desarrollo el contenedor de RabbitMQ puede reiniciarse con frecuencia.
+
+---
+
+### 7. Alcance recortado por límite de tiempo (4 horas)
+* **Contexto:** el ejercicio fue diseñado como *time-boxed* a 4 horas. Se documenta aquí, honestamente, qué quedó dentro del **Core Requirement** y qué no se alcanzó a completar, siguiendo el criterio de la Sección 11 del brief.
+* **Completado:**
+  * Infraestructura Docker completa (6 servicios, healthchecks, dos esquemas de base de datos aislados).
+  * Identidad del Client: generación/persistencia de ULID + `pairing_secret`, comando `client:pair-info`.
+  * Topología RabbitMQ del lado Client: exchange, cola y binding por ULID declarados y verificados en el panel de administración.
+* **No completado (y por qué):**
+  * *(completar aquí según lo que realmente falte al momento de cerrar: Server-side workspace/facility/pairing, Job de activación, consumidor de activación en el Client con idempotencia, sync bidireccional de settings, anti-loop, tests automatizados, GitHub Actions)*
+  * Causa principal: la mayor parte del tiempo se invirtió en resolver incompatibilidades de plataforma (PHP 8.5 del contenedor efímero de Composer vs. PHP 8.3 objetivo, extensiones `sockets`/`bcmath` faltantes, Symfony 8 vs. 7 en el `composer.lock` inicial) antes de poder instalar la librería de colas. Este tipo de fricción de entorno es exactamente el tipo de decisión de "qué priorizar bajo deadline real" que el ejercicio busca evaluar.
