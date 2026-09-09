@@ -1,0 +1,80 @@
+services:
+  mysql_shared:
+    image: mysql:8.4.3
+    ports:
+      - "33060:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  client_web:
+    image: mh_php:8.3-dev
+    command: php artisan serve --host=0.0.0.0 --port=8081
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./client-app:/var/www/html
+    depends_on:
+      mysql_shared:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  client_worker:
+    image: mh_php:8.3-dev
+    command: php artisan queue:work rabbitmq --sleep=3 --tries=3
+    volumes:
+      - ./client-app:/var/www/html
+    depends_on:
+      mysql_shared:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  server_web:
+    image: mh_php:8.3-dev
+    command: php artisan serve --host=0.0.0.0 --port=8082
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./server-app:/var/www/html
+    depends_on:
+      mysql_shared:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  server_worker:
+    image: mh_php:8.3-dev
+    command: php artisan queue:work rabbitmq --sleep=3 --tries=3
+    volumes:
+      - ./server-app:/var/www/html
+    depends_on:
+      mysql_shared:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  mysql_data:

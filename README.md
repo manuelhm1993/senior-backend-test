@@ -71,8 +71,17 @@ DB_PASSWORD=password
 ## Credenciales de prueba 🔐
 
 ```
+Aplicación cliente
 usuario:  admin@technical-assessment.test
 password: password
+
+Aplicación servidor
+usuario:  admin@technical-assessment.test
+password: password
+
+Panel admin Rabbit
+usuario=devuser
+password=devpass
 ```
 
 ---
@@ -82,8 +91,14 @@ password: password
 ```
 senior-backend-test/
 ├── client-app/
+│   └── .env                      ← config interna de Laravel Client
 ├── docs/
+├── mysql-init/
+│   └── init.sql                  ← crea las 2 DBs al primer arranque
 ├── server-app/
+│   └── .env                      ← config interna de Laravel Server
+├── .env                          ← variables para docker-compose
+├── .env.example                  ← plantilla sin secretos, sí va al repo
 └── docker-compose.yml
 ```
 
